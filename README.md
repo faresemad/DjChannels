@@ -9,7 +9,7 @@ INSTALLED_APPS = (
     ...
 )
 ```
-- Then, adjust your project’s asgi.py file, e.g. myproject/asgi.py, to wrap the Django ASGI application:
+- Then, adjust your project’s `asgi.py` file, e.g. `myproject/asgi.py`, to wrap the Django ASGI application:
 ```python
 import os
 

@@ -77,7 +77,7 @@ websocket_urlpatterns = [
     re_path(r"ws/chat/(?P<room_name>\w+)/$", consumers.ChatConsumer.as_asgi()),
 ]
 ```
-- The next step is to point the main *ASGI* configuration at the *chat.routing* module. In `mysite/asgi.py`, import `AuthMiddlewareStack`, `URLRouter`, and `chat.routing`; and insert a `'websocket'` key in the `ProtocolTypeRouter` list in the following format:
+- The next step is to point the main **ASGI** configuration at the **chat.routing** module. In `mysite/asgi.py`, import `AuthMiddlewareStack`, `URLRouter`, and `chat.routing`; and insert a `'websocket'` key in the `ProtocolTypeRouter` list in the following format:
 ```python
 # project/asgi.py
 import os
@@ -180,7 +180,7 @@ class ChatConsumer(WebsocketConsumer):
 - When a user posts a message, a JavaScript function will transmit the message over WebSocket to a ChatConsumer. The ChatConsumer will receive that message and forward it to the group corresponding to the room name.
 
 - `self.scope["url_route"]["kwargs"]["room_name"]`
-    - Obtains the `'room_name'` parameter from the URL route in `chat/routing.py` that opened the *WebSocket* connection to the *consumer*.
+    - Obtains the `'room_name'` parameter from the URL route in `chat/routing.py` that opened the **WebSocket** connection to the **consumer**.
     - بيحصل علي الباراميتر اللي اسمه `room_name` من الراوت اللي فاتح الكونكشن
 
 - `self.room_group_name = "chat_%s" % self.room_name`
@@ -203,3 +203,55 @@ class ChatConsumer(WebsocketConsumer):
     - `chat_message` هو الاسم اللي هيتعرف عليه الكونسيومر اللي هيستقبل الايفنت ده
     - `message` هو الاسم اللي هيستخدمه الكونسيومر اللي هيستقبل الايفنت ده للوصول للرساله اللي اتبعتت
     - `self.send(text_data=json.dumps({"message": message}))`: بيبعت الرساله اللي اتبعتت للكونسيومر اللي هيستقبل الايفنت ده
+
+## Rewrite Chat Server as Asynchronous
+- Let’s rewrite `ChatConsumer` to be asynchronous. Put the following code in `chat/consumers.py`:
+```python
+# chat/consumers.py
+import json
+
+from channels.generic.websocket import AsyncWebsocketConsumer
+
+
+class ChatConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.room_name = self.scope["url_route"]["kwargs"]["room_name"]
+        self.room_group_name = "chat_%s" % self.room_name
+
+        # Join room group
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        # Leave room group
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+
+    # Receive message from WebSocket
+    async def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message = text_data_json["message"]
+
+        # Send message to room group
+        await self.channel_layer.group_send(
+            self.room_group_name, {"type": "chat_message", "message": message}
+        )
+
+    # Receive message from room group
+    async def chat_message(self, event):
+        message = event["message"]
+
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps({"message": message}))
+```
+
+- This new code is for **ChatConsumer** is very similar to the original code, with the following differences:
+    - `WebsocketConsumer` has been replaced by `AsyncWebsocketConsumer`.
+    - All methods have been made `async def`.
+    - `await` has been added before all calls into `self.channel_layer`.
+    - `async_to_sync` has been removed from the import list.
+    - `async_to_sync` has been removed from all calls into `self.channel_layer`.
+    - `ChatConsumer` now inherits from `AsyncWebsocketConsumer` rather than `WebsocketConsumer`.
+    - All methods are `async def` rather than just `def`.
+    - `await` is used to call asynchronous functions that perform I/O.
+    - `async_to_sync` is no longer needed when calling methods on the channel layer.

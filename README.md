@@ -254,3 +254,73 @@ class ChatConsumer(AsyncWebsocketConsumer):
     - All methods are `async def` rather than just `def`.
     - `await` is used to call asynchronous functions that perform I/O.
     - `async_to_sync` is no longer needed when calling methods on the channel layer.
+
+## Database Access
+- If you are writing asynchronous code, however, you will need to call database methods in a safe, synchronous context, using `database_sync_to_async`.
+    | If you wish to control the maximum number of threads used, set the `ASGI_THREADS` environment variable to the maximum number you wish to allow. By default, the number of threads is set to **“the number of CPUs * 5”** for Python 3.7 and below, and *min(32, os.cpu_count() + 4)* for Python 3.8+.
+
+### database_sync_to_async
+- `channels.db.database_sync_to_async` is a version of `asgiref.sync.sync_to_async` that also cleans up database connections on exit.
+- To use it, write your ORM queries in a separate function or method, and then call it with `database_sync_to_async` like so:
+```python
+from channels.db import database_sync_to_async
+
+async def connect(self):
+    self.username = await database_sync_to_async(self.get_name)()
+
+def get_name(self):
+    return User.objects.all()[0].name
+```
+- You can also use it as a decorator:
+```python
+from channels.db import database_sync_to_async
+
+async def connect(self):
+    self.username = await self.get_name()
+
+@database_sync_to_async
+def get_name(self):
+    return User.objects.all()[0].name
+```
+
+### Implement Database Access
+- Let’s modify `ChatConsumer` to get the username from the database, Put the following code in `chat/consumers.py`:
+```python
+async def connect(self):
+        self.user = await self.get_name()
+        ...
+        await self.accept()
+
+@database_sync_to_async
+def get_name(self):
+    return User.objects.all()[0].username
+
+async def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message = text_data_json["message"]
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                "type": "chat_message",
+                "msgGroup": message,
+                "username": self.user, # New
+            },
+        )
+
+async def chat_message(self, event):
+        message = event["msgGroup"]
+        username = event["username"] # New
+        # add username to text_data
+        await self.send(
+            text_data=json.dumps({"message": message, "username": username})
+        )
+```
+- You can change the query to get the username from the database however you like. For example, you could get the username from the session, or from a cookie, or from a token in the URL.
+
+- Let's modify `room.html` to display the username, Put the following code in `chat/templates/chat/room.html`:
+```javascript
+chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            document.querySelector('#chat-log').value += (data.username + ': ' +data.message + '\n');
+        };
+```

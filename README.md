@@ -286,15 +286,21 @@ def get_name(self):
 ### Implement Database Access
 - Let’s modify `ChatConsumer` to get the username from the database, Put the following code in `chat/consumers.py`:
 ```python
+# connect function
 async def connect(self):
         self.user = await self.get_name()
         ...
         await self.accept()
 
+
+# get_name function to get username for first user
 @database_sync_to_async
 def get_name(self):
     return User.objects.all()[0].username
 
+#---------------------------------------------------------------------------/
+
+# modify receive function to send username to room group
 async def receive(self, text_data):
         text_data_json = json.loads(text_data)
         message = text_data_json["message"]
@@ -307,6 +313,9 @@ async def receive(self, text_data):
             },
         )
 
+#---------------------------------------------------------------------------/
+
+# modify chat_message function to send username to websocket
 async def chat_message(self, event):
         message = event["msgGroup"]
         username = event["username"] # New

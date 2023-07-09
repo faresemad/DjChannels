@@ -32,13 +32,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             {
                 "type": "chat_message",
-                "msgGroup": message,
-                "username": self.user,
+                "msgGroup": message,  # comes from chat_message fucntion
+                "username": self.user,  # comes from chat_message fucntion
             },
         )
 
     # Receive message from room group
     async def chat_message(self, event):
+        # We define the things we want to send to the WebSocket
         message = event["msgGroup"]
         username = event["username"]
 
